@@ -1,0 +1,229 @@
+---
+title: "Exploring the BRFSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(stringr)
+```
+
+### Load data
+
+```{r load-data}
+load("brfss2013.RData")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+The Behavioral Risk Factor Surveillance System (BRFSS) is a collaborative project between all of the states in the United States (US) and participating US territories and the Centers for Disease Control and Prevention (CDC). The BRFSS objective is to collect uniform, state-specific data on preventive health practices and risk behaviors that are linked to chronic diseases, injuries etc.  
+
+Data was collected using *__landline telephone-based surveys__* (interviewers collect data from a randomly selected adult in a household) and *__cellular telephone-based surveys__* (interviewers collect data from an adult who participates by using a cellular telephone and resides in a private residence or college housing).  
+
+BRFSS dataset is collected to measure behavioral risk factors for the non-institutionalized adult population (18 years of age and older) residing in the US. So, any characteristics estimated from the BRFSS only pertain to the *__non-institutionalized adult population, aged 18 years or older, who reside in the US__*.
+
+*__Scope of inference__*: data is collected using random sampling approach, so we can talk about generalizability; however, random assignment was not used, so we can not answer casual questions using the BRFSS dataset.
+* * *
+
+## Part 2: Research questions
+
+**Research quesion 1:**
+
+Does people who could not see doctor because of cost have lower general health level on average than those who could?
+
+**Research quesion 2:**
+
+Do most of veterans have or had in the past one or more of the following problems/diseases: a depressive disorder, difficulty concentrating or remembering; is the situation different for those who are not veterans?
+
+**Research quesion 3:**
+
+Does veterans more often feel nervous or hopeless or restless or depressed than ordninary people?
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+**Research quesion 1:**
+
+Description of variables which we need to answer question 1:
+
+*__genhlth__*: General Health  
+*__medcost__*: Could Not See Dr. Because Of Cost
+
+```{r}
+df_question1 <- brfss2013 %>%
+  mutate(medcost = ifelse(medcost=="No", 0, 1)) %>%
+  mutate(genhlth = factor(genhlth, levels = rev(levels(genhlth)))) %>%
+  mutate(genhlth = as.numeric(genhlth)) %>%
+  filter(!is.na(genhlth), !is.na(medcost)) %>%
+  select(genhlth, medcost)
+
+answer <- df_question1 %>%
+  group_by(medcost) %>%
+  summarise(avg_health_level = mean(genhlth)); answer
+```
+
+*__genhlth__* was converted to a numeric factor variable where 1 is the the lowest level of health (Poor) and 5 is the hughest one (Excellent)
+
+So, people who could not see doctor because of cost have __lower__ general health level on average than those who could. 
+
+Now we can create bar chart to illustrate this fact:
+
+```{r}
+val = c('Could see doctor', 'Could not see doctor because of cost')
+
+ggplot(data = answer,aes(x=medcost,y=avg_health_level, fill=as.factor(medcost)))+
+  geom_bar(stat='identity')+
+  labs(x="Medcost",y="Count")+
+  labs(title = "Average general health level for two groups")+
+  scale_fill_discrete(name = "Legend", labels = str_wrap(val, 20))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+As we can see the difference between the average general health level for two groups is not huge, but still significant.
+So, people who could not see doctor because of cost have lower general health level on average than those who could.
+
+**Research quesion 2:**
+
+Description of variables which I need to answer question 2:  
+
+*__veteran3__*: Are You A Veteran  
+*__addepev2__*: Ever Told You Had A Depressive Disorder  
+*__decide__*: Difficulty Concentrating Or Remembering
+
+Descriotion of variables I created:
+*__any_disease__*: new variable; equals 1 if person has depressive disorder or difficilty concetrating or remembering or both, equals 0 in all other cases.
+
+```{r}
+df_question2 <- brfss2013 %>%
+  filter(!is.na(veteran3), !is.na(addepev2), !is.na(decide)) %>%
+  select(veteran3, addepev2, decide)
+
+df_question2 <- df_question2 %>%
+  mutate(any_disease = ifelse(((.$a == 'Yes')|(.$d == 'Yes')), 1, 0))
+
+question2_veteran <- df_question2 %>%
+  filter(veteran3 == 'Yes') %>%
+  group_by(any_disease) %>%
+  summarize(count=n()); question2_veteran
+```
+
+Most of veterans do not have or had in the past a depressive disorder or/and difficulty concentrating or remembering. Now we will check whether answer will be different for other part of population.
+
+```{r}
+question2_not_veteran <- df_question2 %>%
+  filter(veteran3 != 'Yes') %>%
+  group_by(any_disease) %>%
+  summarize(count=n()); question2_not_veteran
+```
+
+Result for people who are not veterans is the same: most of them do not have any of discussed diseases.
+
+Now we can create bar chart for veterans:
+
+```{r}
+val = c('Do not have any of two problems',
+        'Have a depressive disorder or/and difficulty concentrating or remembering')
+
+ggplot(data = question2_veteran,aes(x=any_disease,y=count, fill=as.factor(any_disease)))+
+  geom_bar(stat='identity')+
+  labs(x="Any of two problems",y="Count")+
+  labs(title = "Distribution among veterans")+
+  scale_fill_discrete(name = "Legend", labels = str_wrap(val, 20))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+And similar bar chart for people who are not veterans:
+
+```{r}
+ggplot(data = question2_not_veteran,aes(x=any_disease,y=count, fill=as.factor(any_disease)))+
+  geom_bar(stat='identity')+
+  labs(x="Any of two problems",y="Count")+
+  labs(title = "Distribution among those who are not veterans")+
+  scale_fill_discrete(name = "Legend", labels = str_wrap(val, 20))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+We see that although distributions are different in absolute terms (obviously), but the relative difference is very small: two distributions seem very similar. That means that veterans as a group of population are not very different (when compared for the spread of the two diseases).  
+So, most of veterans do not have or had in the past one or more of the following problems/diseases: a depressive disorder, difficulty concentrating or remembering; result is the same for those who are not veterans: most of them do not have or had in the past one or more of the following problems/diseases: a depressive disorder, difficulty concentrating or remembering.
+
+**Research quesion 3:**
+
+Description of variables which we need to answer question 3: 
+
+*__veteran3__*: Are You A Veteran  
+*__misnervs__*: How Often Feel Nervous Past 30 Days  
+*__mishopls__*: How Often Feel Hopeless Past 30 Days  
+*__misrstls__*: How Often Feel Restless Past 30 Days  
+*__misdeprd__*: How Often Feel Depressed Past 30 Days  
+
+Descriotion of variables I created:
+*__sum_days__*: equals 1 if person was nervous or/and hopeless or/and restless or/and depressed; 0 otherwise.
+
+```{r}
+df_question3 <- brfss2013 %>%
+  filter(!is.na(veteran3), !is.na(misnervs), !is.na(mishopls), !is.na(misrstls),!is.na(misdeprd)) %>%
+  select(veteran3, misnervs, mishopls, misrstls, misdeprd) %>%
+  mutate(misnervs = ifelse(misnervs == "None", 0, 1)) %>%
+  mutate(mishopls = ifelse(mishopls == "None", 0, 1)) %>%
+  mutate(misrstls = ifelse(misrstls == "None", 0, 1)) %>%
+  mutate(misdeprd = ifelse(misdeprd == "None", 0, 1)) %>%
+  mutate(sum_days = misnervs + mishopls + misrstls + misdeprd) %>%
+  mutate(sum_days = ifelse(sum_days >= 1, 1, 0))
+
+question3_veteran <- df_question3 %>%
+  filter(veteran3 == 'Yes') %>%
+  group_by(sum_days) %>%
+  summarize(count=n()); question3_veteran
+```
+
+So, most veterans do not feel nervous or restless or depressed (during the last 30 days). 
+
+We can visualize this:
+
+```{r}
+val = c('Feel nervous or hopeless or restless or depressed','Do not feel nervous or hopeless or restless or depressed')
+ggplot(data = question3_veteran,aes(x=sum_days,y=count, fill=as.factor(sum_days)))+
+  geom_bar(stat='identity')+
+  labs(x="Nervous or hopeless or restless or depressed",y="Count")+
+  labs(title = "Distribution for veterans")+
+  scale_fill_discrete(name = "Legend", labels = str_wrap(val, 20))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+As we can see the difference between two groups is quite small.
+
+Now we can do the same calculations for whose who are not veterans:
+
+```{r}
+question3_not_veteran <- df_question3 %>%
+  filter(veteran3 != 'Yes') %>%
+  group_by(sum_days) %>%
+  summarize(count=n()); question3_not_veteran
+
+ggplot(data = question3_not_veteran,aes(x=sum_days,y=count, fill=as.factor(sum_days)))+
+  geom_bar(stat='identity')+
+  labs(x="Nervous or hopeless or restless or depressed",y="Count")+
+  labs(title = "Distribution for people who are not veterans")+
+  scale_fill_discrete(name = "Legend", labels = str_wrap(val, 20))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Most of people who are not veterans also do not feel nervous or restless or depressed (during the last 30 days). However, we found something interesting: difference between two groups in this case is quite big.   
+So, veterans more often feel nervous or hopeless or restless or depressed than ordninary people.
+
+### Thank you for reading my project :)
+
